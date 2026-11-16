@@ -34,6 +34,7 @@
       />
     </b-form-group>
     <b-form-group
+      v-if="isVersionSelectable"
       id="fieldset-export-version"
       :label="this.$t('message.cyclonedx_version')"
       label-for="input-export-version"
@@ -87,6 +88,7 @@ export default {
   mixins: [permissionsMixin],
   props: {
     uuid: String,
+    project: Object,
   },
   data() {
     return {
@@ -99,19 +101,22 @@ export default {
   },
   computed: {
     typeOptions() {
+      // Collection projects have no components of their own, so the
+      // component-based exports would produce empty documents.
+      const isCollection = this.project != null && this.project.collectionLogic != null;
       const vulnPermissions = [
         this.PERMISSIONS.VIEW_VULNERABILITY,
         this.PERMISSIONS.VULNERABILITY_ANALYSIS,
         this.PERMISSIONS.VULNERABILITY_ANALYSIS_READ,
       ];
       const options = [];
-      if (this.isPermitted(this.PERMISSIONS.VIEW_PORTFOLIO)) {
+      if (!isCollection && this.isPermitted(this.PERMISSIONS.VIEW_PORTFOLIO)) {
         options.push({
           value: 'inventory',
           text: this.$t('message.inventory'),
         });
       }
-      if (this.isPermitted(vulnPermissions)) {
+      if (!isCollection && this.isPermitted(vulnPermissions)) {
         options.push(
           {
             value: 'withVulnerabilities',
@@ -120,6 +125,12 @@ export default {
           { value: 'vdr', text: this.$t('message.vdr') },
           { value: 'vex', text: this.$t('message.vex') },
         );
+      }
+      if (this.isPermitted(this.PERMISSIONS.VIEW_VULNERABILITY)) {
+        options.push({
+          value: 'vulnerabilityReport',
+          text: this.$t('message.vulnerability_report'),
+        });
       }
       return options;
     },
@@ -130,10 +141,16 @@ export default {
       if (this.type === 'vex') {
         return this.$t('message.export_vex_tooltip');
       }
+      if (this.type === 'vulnerabilityReport') {
+        return this.$t('message.export_vulnerability_report_tooltip');
+      }
       return null;
     },
     isFormatSelectable() {
-      return this.type !== 'vex';
+      return this.type !== 'vex' && this.type !== 'vulnerabilityReport';
+    },
+    isVersionSelectable() {
+      return this.type !== 'vulnerabilityReport';
     },
     effectiveFormat() {
       return this.isFormatSelectable ? this.format : 'JSON';
@@ -164,7 +181,39 @@ export default {
       this.version = null;
       this.isDownloading = false;
     },
+    reportFallbackFileName: function () {
+      const date = new Date();
+      const datePart = [
+        String(date.getDate()).padStart(2, '0'),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        date.getFullYear(),
+      ].join('');
+      const sanitize = (value) =>
+        (value == null ? '' : String(value))
+          .replace(/[^A-Za-z0-9._-]/g, '_')
+          .replace(/_{2,}/g, '_');
+      return `${sanitize(this.project && this.project.name)}_${sanitize(
+        this.project && this.project.version,
+      )}_CVE_${datePart}.csv`;
+    },
     download: function () {
+      if (this.type === 'vulnerabilityReport') {
+        this.isDownloading = true;
+        common
+          .downloadAttachment(
+            this.axios,
+            `${this.$api.BASE_URL}/${this.$api.URL_FINDING}/project/${this.uuid}/report.csv`,
+            {},
+            this.reportFallbackFileName(),
+          )
+          .then(() => {
+            this.$root.$emit('bv::hide::modal', 'projectExportModal');
+          })
+          .finally(() => {
+            this.isDownloading = false;
+          });
+        return;
+      }
       const isVex = this.type === 'vex';
       const resource = isVex ? this.$api.URL_VEX : this.$api.URL_BOM;
       const params = { download: 'true', version: this.version };
