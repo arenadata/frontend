@@ -326,7 +326,6 @@
             }}</b-tooltip>
 
             <b-button
-              v-if="!isCollectionProject"
               variant="outline-primary"
               v-b-modal.projectExportModal
               v-permission:or="[
@@ -341,7 +340,6 @@
 
             <b-button
               id="reanalyze-button"
-              v-if="!isCollectionProject"
               variant="outline-primary"
               @click="reAnalyze()"
               :disabled="isAnalysisRequested"
@@ -529,7 +527,7 @@
     <project-add-version-modal :uuid="this.uuid" />
     <project-upload-bom-modal :uuid="this.uuid" />
     <project-upload-vex-modal :uuid="this.uuid" />
-    <project-export-modal :uuid="this.uuid" />
+    <project-export-modal :uuid="this.uuid" :project="this.project" />
   </div>
 </template>
 
